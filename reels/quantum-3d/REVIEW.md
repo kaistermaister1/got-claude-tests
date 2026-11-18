@@ -28,3 +28,11 @@
 
 ## Re-render
 `npm install`, then `node ../../.claude/skills/video-reels/scripts/render.mjs index.html --out quantum-entanglement-3d.mp4 --workers 3 --shutter 2 --crf 17`
+
+## v2.1: ElevenLabs voiceover
+- **Output**: `quantum-entanglement-3d-voiced.mp4` (video stream copied untouched, AAC 192k 48 kHz) and `voiceover/voiceover.wav`.
+- **Voice**: Brian (premade `nPczCjzI2devNBz1zQrb`), model `eleven_v4`, generated through the account's API key (proxy-injected).
+- **Script**: `voiceover/narration.json`. Seven lines, one per beat. It complements the on-screen titles rather than repeating them.
+- **Fitting**: three lines first overran their beats. I cut words, capped inner pauses at 0.28 s, and widened two slots slightly. All lines now fit at natural speed (1.0x).
+- **Measured**: speech segments via `silencedetect` (each line starts on its beat and ends before the next scene), integrated loudness -16.7 LUFS.
+- **Not checked**: I can't hear the audio. Pronunciation of "Hadamard", "CNOT" and "qubits", tone and pacing are unverified by ear. To change voice, edit `voice_id` and re-run `voiceover.py`.

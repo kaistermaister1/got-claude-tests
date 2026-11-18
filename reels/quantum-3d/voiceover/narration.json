@@ -1,0 +1,49 @@
+{
+  "voice_id": "nPczCjzI2devNBz1zQrb",
+  "voice_name": "Brian (ElevenLabs premade)",
+  "model_id": "eleven_v4",
+  "lines": [
+    {
+      "id": "l1",
+      "start": 0.2,
+      "end": 5.2,
+      "text": "This is a quantum computer. Inside, it's colder than space."
+    },
+    {
+      "id": "l2",
+      "start": 5.4,
+      "end": 8.5,
+      "text": "Down at the very bottom sits the chip."
+    },
+    {
+      "id": "l3",
+      "start": 9.4,
+      "end": 13.3,
+      "text": "It holds two qubits. Each one starts out as a zero."
+    },
+    {
+      "id": "l4",
+      "start": 13.6,
+      "end": 16.9,
+      "text": "A Hadamard gate tips the first one into superposition."
+    },
+    {
+      "id": "l5",
+      "start": 17.15,
+      "end": 23.65,
+      "text": "CNOT links them. Alone, each one is pure chance. Together, they match."
+    },
+    {
+      "id": "l6",
+      "start": 23.8,
+      "end": 30.2,
+      "text": "Now, measure them a thousand times. Only zero-zero, or one-one."
+    },
+    {
+      "id": "l7",
+      "start": 30.8,
+      "end": 35.6,
+      "text": "They always agree. That's entanglement."
+    }
+  ]
+}

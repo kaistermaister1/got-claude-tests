@@ -91,6 +91,15 @@ Build the look from **one medium's rules** instead, e.g. a risograph: flat paper
 - A film over ~15 s that tells something wants a music bed plus a few effects with on-screen causes (whoosh on a cut, pop on a landing; peak one frame after the picture).
 - Use the person's track or a licensed library.
 - Don't write music in code or synthesise chimes. You can't hear the result. Without a music source, deliver silent, designed to read muted, and say so in one line with how to add a track: `ffmpeg -i reel.mp4 -i music.mp3 -c:v copy -c:a aac -b:a 192k -shortest out.mp4`.
+- **ElevenLabs voiceover** (`scripts/voiceover.py`):
+  1. Write `narration.json`: `voice_id`, `model_id` (prefer the newest TTS model the account lists, e.g. `eleven_v4`), and lines with `start`/`end` slots matching the film's beats.
+  2. Run `python3 voiceover.py narration.json --duration <s> --out voiceover.wav`. It synthesises each line with `previous_text`/`next_text` for continuity and trims silence. It caps inner pauses at 0.28 s, nudges `speed` up to at most 1.12 if a line overruns, places each line at its start, and loudness-normalises to -16 LUFS.
+  3. If a line is still OVER, **cut words**; don't push speed further.
+  4. Mux: `ffmpeg -i film.mp4 -i voiceover.wav -map 0:v -map 1:a -c:v copy -c:a aac -b:a 192k -shortest out.mp4`, or pass `--audio` to `render.mjs`.
+  - Key handling in a Claude cloud session: `request_credential` for host `api.elevenlabs.io`, header `xi-api-key`. The proxy injects it, so never paste keys into chat.
+  - `/v2/voices` can 502 intermittently. Premade voice IDs work directly: Brian `nPczCjzI2devNBz1zQrb`, George `JBFqnCBsd6RMkjVDRZzb`.
+  - Write narration that adds to the on-screen text instead of repeating it: about 2.3 words/s, one idea per line.
+  - Verify with `silencedetect` that speech sits inside each beat. You can't hear it, so say so.
 - Narration, only when asked: the voice is the clock. Text lands on the word that says it; about 19 words per scene; captions inside the safe zone.
 
 ## 8. Built-in pipeline
