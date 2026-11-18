@@ -124,7 +124,31 @@ Options: `--fps 30 --width 1080 --height 1920 --crf 18`.
 
 **Delivery encode** (Instagram / TikTok / Shorts): H.264 High, `yuv420p`, 30 fps, 1080x1920, CRF ~18, `+faststart`, AAC 48 kHz if there is audio, ≤ 90 s.
 
-## 9. Etiquette (from Remotion and HyperFrames)
+## 9. Going cinematic: 3D with three.js (when "flat" isn't impressive enough)
+
+Flat 2D motion graphics read as slides. For a "wow" level, build a small 3D world and fly a camera through it. Reference: `reels/quantum-3d/index.html`.
+
+- **Start from a real object.** The hook is the real thing the subject lives in (a dilution-refrigerator "chandelier", an engine, a cell). Then dive into it with a **match cut**: push the camera into a surface until it fills the frame, then cut to a second world whose camera sees the same texture at the same framing.
+  - Use the same `CanvasTexture` in both worlds.
+  - Size the second camera's distance to match: `dB = dA * (sizeB/sizeA) * tan(fovA/2)/tan(fovB/2)`.
+  - Cut at the fastest frame of the push, with a 0.14 s blur swap.
+- **The object is the explanation.** Abstract pieces become physical props. Examples: wires as gold rails, gates as portals with their symbol on top, states as glass spheres with arrows, results as towers of instanced cubes. Labels are HTML projected from 3D points (`vector.project(camera)`).
+- **Look:**
+  - PBR materials (metalness 1, roughness 0.25-0.45 for metals) lit by `RoomEnvironment` through PMREM.
+  - ACES tone mapping, a key light with PCF-soft shadows, a cool rim light.
+  - Fog in the background colour for depth. A light seamless ground, not a dark void.
+  - CSS vignette and static grain on top.
+- **Camera = rigs + blends.** Write each shot as a function `rig(t) -> {pos, target, up}`. Blend between rigs with inOut eases, and let follow rigs track the subject's position. The narrow 9:16 frame needs a wider FOV (≈45°) and subjects spaced inside about 0.45 x distance.
+- **Determinism:** everything is a function of `t`, including `InstancedMesh` matrices (e.g. 1,000 cubes, each with a launch time and a parabolic flight).
+- **Gotchas:**
+  - ES modules, fonts and `fetch` need http, not file:// (`render.mjs` serves the folder).
+  - Set `frustumCulled = false` on instanced meshes whose instances start at zero scale, or they never draw.
+  - Use `preserveDrawingBuffer: true` and `setPixelRatio(1)`.
+  - Draw canvas textures that contain text after `document.fonts.load(...)`.
+  - Check the cut frames and every follow shot at 9:16; things get cropped at the sides.
+- **Performance:** headless Chromium uses SwiftShader (CPU WebGL). At 1080x1920 with shadows, expect ~1 s per frame. Use `--workers 3` for parallel ranges and `--shutter 2` for real motion blur (doubles the cost). Iterate on `--at` stills; render the full film once.
+
+## 10. Etiquette (from Remotion and HyperFrames)
 
 - The person may have edited files since your last turn. Read before you change anything, and build on their edits.
 - Open or show a preview (stills or a contact sheet) before a long render when the person is steering. Render the final file when they ask for the file or said "no stops".

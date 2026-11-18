@@ -1,0 +1,588 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Inside a Quantum Computer</title>
+<style>
+  @font-face { font-family: 'IT'; font-weight: 500; src: url('node_modules/@fontsource/inter-tight/files/inter-tight-latin-500-normal.woff2') format('woff2'); }
+  @font-face { font-family: 'IT'; font-weight: 700; src: url('node_modules/@fontsource/inter-tight/files/inter-tight-latin-700-normal.woff2') format('woff2'); }
+  :root { --bg:#d9d3c9; --ink:#121212; --cobalt:#2340ff; --red:#e3432b; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { width:1080px; height:1920px; overflow:hidden; background:var(--bg); }
+  #stage { position:relative; width:1080px; height:1920px; overflow:hidden; font-family:'IT', 'Inter', sans-serif; color:var(--ink); }
+  canvas { position:absolute; inset:0; width:1080px; height:1920px; display:block; }
+  #scrim { position:absolute; left:0; right:0; top:0; height:720px;
+    background: linear-gradient(to bottom, rgba(217,211,201,.92) 0%, rgba(217,211,201,.78) 45%, rgba(217,211,201,0) 100%); }
+  #vignette { position:absolute; inset:0; pointer-events:none;
+    background: radial-gradient(ellipse 85% 70% at 50% 52%, rgba(0,0,0,0) 60%, rgba(40,30,20,.20) 100%); }
+  #grain { position:absolute; inset:0; opacity:.07; mix-blend-mode:multiply; pointer-events:none; }
+  .title { position:absolute; left:84px; top:206px; width:900px; font-size:94px; font-weight:700; line-height:.98; letter-spacing:-0.035em; opacity:0; }
+  .title .w { display:inline-block; white-space:pre; }
+  .sub { position:absolute; left:88px; top:420px; width:880px; font-size:42px; font-weight:500; line-height:1.2; letter-spacing:-0.012em; opacity:0; }
+  .ket { font-family:'IT', 'DejaVu Sans', sans-serif; }
+  #formula { position:absolute; left:84px; top:412px; font-size:84px; font-weight:700; color:var(--cobalt); letter-spacing:-0.03em; opacity:0; }
+  #s7 { top:530px; }
+  .tag { position:absolute; left:0; top:0; font-size:40px; font-weight:700; white-space:nowrap; opacity:0; will-change:transform; }
+  .tag.small { font-size:36px; }
+  .tag.never { color:var(--red); font-size:34px; letter-spacing:.04em; border:4px solid var(--red); padding:2px 12px 4px; }
+  #counter { font-variant-numeric: tabular-nums; }
+  #flash { position:absolute; inset:0; background:#f4efe6; opacity:0; }
+</style>
+<script type="importmap">
+{ "imports": { "three": "./node_modules/three/build/three.module.js", "three/addons/": "./node_modules/three/examples/jsm/" } }
+</script>
+</head>
+<body>
+<div id="stage">
+  <canvas id="c" width="1080" height="1920"></canvas>
+  <div id="flash"></div>
+  <div id="scrim"></div>
+  <svg id="grain" width="1080" height="1920"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" seed="7"/><feColorMatrix type="saturate" values="0"/></filter><rect width="100%" height="100%" filter="url(#n)"/></svg>
+  <div id="vignette"></div>
+
+  <div class="tag" id="tq0">q0</div>
+  <div class="tag" id="tq1">q1</div>
+  <div class="tag small ket" id="k00">|00⟩</div>
+  <div class="tag small ket" id="k01">|01⟩</div>
+  <div class="tag small ket" id="k10">|10⟩</div>
+  <div class="tag small ket" id="k11">|11⟩</div>
+  <div class="tag never" id="n01">NEVER</div>
+  <div class="tag never" id="n10">NEVER</div>
+
+  <div class="title" id="t1">This machine is<br>colder than space.</div>
+  <div class="sub" id="s1">0.01 K inside. Deep space: 2.7 K.</div>
+  <div class="title" id="t2">At the bottom:<br>a quantum chip.</div>
+  <div class="title" id="t3">Two qubits.<br>Both start at 0.</div>
+  <div class="sub" id="s3">Each arrow shows a qubit’s state.</div>
+  <div class="title" id="t4">Gate H tips q0<br>halfway to 1.</div>
+  <div class="sub" id="s4">A superposition of 0 and 1.</div>
+  <div class="title" id="t5">CNOT links<br>the two qubits.</div>
+  <div class="sub" id="s5a">Alone, each is now pure chance.</div>
+  <div class="sub" id="s5b">Together, they always match.</div>
+  <div class="title" id="t6">Measure them<br>1,000 times.</div>
+  <div class="sub" id="s6">Shot <span id="counter">0</span></div>
+  <div class="title" id="t7">They always<br>agree.</div>
+  <div id="formula" class="ket">(|00⟩ + |11⟩) / √2</div>
+  <div class="sub" id="s7">That’s entanglement.</div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { FontLoader } from 'three/addons/loaders/FontLoader.js';
+import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
+
+const W = 1080, H = 1920, DUR = 36;
+const $ = (s) => document.querySelector(s);
+
+// ---------------- easing + helpers ----------------
+const clamp01 = (x) => Math.max(0, Math.min(1, x));
+const seg = (t, a, b) => clamp01((t - a) / (b - a));
+const E = {
+  lin: (x) => x,
+  inOut2: (x) => (x < .5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2),
+  inOut3: (x) => (x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2),
+  out3: (x) => 1 - Math.pow(1 - x, 3),
+  out4: (x) => 1 - Math.pow(1 - x, 4),
+  outExpo: (x) => (x >= 1 ? 1 : 1 - Math.pow(2, -10 * x)),
+  in3: (x) => x * x * x,
+  backOut: (x, s = 1.6) => 1 + (s + 1) * Math.pow(x - 1, 3) + s * Math.pow(x - 1, 2),
+  spring: (x, z = .55, w = 11) => (x >= 1 ? 1 : 1 - Math.exp(-z * w * x) * Math.cos(w * Math.sqrt(1 - z * z) * x)),
+};
+const lerp = (a, b, u) => a + (b - a) * u;
+const v3 = (x, y, z) => new THREE.Vector3(x, y, z);
+const lerpV = (a, b, u) => a.clone().lerp(b, u);
+
+// ---------------- renderer ----------------
+const renderer = new THREE.WebGLRenderer({ canvas: $('#c'), antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(1);
+renderer.setSize(W, H, false);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+const scene = new THREE.Scene();
+const BG = new THREE.Color('#d9d3c9');
+scene.background = BG;
+scene.fog = new THREE.Fog(BG, 8, 26);
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+scene.environmentIntensity = 0.9;
+
+const camera = new THREE.PerspectiveCamera(35, W / H, 0.01, 200);
+
+const hemi = new THREE.HemisphereLight('#fffaf0', '#a89580', 0.7);
+scene.add(hemi);
+const key = new THREE.DirectionalLight('#fff4e2', 2.4);
+key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048);
+key.shadow.bias = -0.0004;
+key.shadow.normalBias = 0.02;
+key.shadow.radius = 4;
+scene.add(key, key.target);
+const rim = new THREE.DirectionalLight('#dfe8ff', 1.4);
+scene.add(rim, rim.target);
+
+// ---------------- materials ----------------
+const M = {
+  gold: new THREE.MeshStandardMaterial({ color: '#e7b85f', metalness: 1, roughness: 0.26 }),
+  goldSatin: new THREE.MeshStandardMaterial({ color: '#d9a94f', metalness: 1, roughness: 0.42 }),
+  copper: new THREE.MeshStandardMaterial({ color: '#c8794a', metalness: 1, roughness: 0.33 }),
+  steel: new THREE.MeshStandardMaterial({ color: '#c3c6ca', metalness: 1, roughness: 0.28 }),
+  ink: new THREE.MeshStandardMaterial({ color: '#141414', metalness: 0.2, roughness: 0.45 }),
+  cobalt: new THREE.MeshStandardMaterial({ color: '#2340ff', metalness: 0.15, roughness: 0.32 }),
+  glass: new THREE.MeshPhysicalMaterial({ color: '#ffffff', metalness: 0, roughness: 0.06, transparent: true, opacity: 0.2,
+    clearcoat: 1, clearcoatRoughness: 0.05, depthWrite: false, envMapIntensity: 1.4 }),
+  line: new THREE.MeshStandardMaterial({ color: '#2a2a2a', metalness: 0.3, roughness: 0.5 }),
+};
+const shadowed = (m) => { m.castShadow = true; m.receiveShadow = true; return m; };
+
+// ---------------- chip texture (deterministic canvas) ----------------
+const CHIP_CANVAS = document.createElement('canvas');
+function chipTexture() {
+  const S = 2048, c = CHIP_CANVAS; c.width = c.height = S;
+  const g = c.getContext('2d');
+  g.fillStyle = '#cdd2d8'; g.fillRect(0, 0, S, S);
+  // faint film variation
+  for (let i = 0; i < 40; i++) { g.fillStyle = `rgba(255,255,255,${0.012 + (i % 5) * 0.004})`; g.fillRect(0, i * 52, S, 26); }
+  const cpw = (pts, w = 14, gap = 8) => {
+    g.lineJoin = 'round'; g.lineCap = 'round';
+    g.beginPath(); pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
+    g.strokeStyle = '#59626e'; g.lineWidth = w + gap * 2; g.stroke();
+    g.strokeStyle = '#e2e6ea'; g.lineWidth = w; g.stroke();
+  };
+  const meander = (x0, y0, turns, len, pitch, dir = 1) => {
+    const p = [[x0, y0]]; let x = x0, y = y0;
+    for (let i = 0; i < turns; i++) { x += len * (i % 2 ? -1 : 1) * dir; p.push([x, y]); y += pitch; p.push([x, y]); }
+    return p;
+  };
+  // bond pads around the edge
+  g.fillStyle = '#d6aa55';
+  for (let i = 0; i < 12; i++) {
+    const s = 180 + i * 150;
+    g.fillRect(s - 34, 40, 68, 90); g.fillRect(s - 34, S - 130, 68, 90);
+    g.fillRect(40, s - 34, 90, 68); g.fillRect(S - 130, s - 34, 90, 68);
+  }
+  // feedline across the top
+  cpw([[130, 330], [S - 130, 330]], 18, 10);
+  // readout resonators down to the two qubits
+  const Q = [[1024 - 188, 1024], [1024 + 188, 1024]];
+  Q.forEach(([qx, qy], k) => {
+    const dir = k ? 1 : -1;
+    const m = meander(qx, 352, 9, 150 * dir, 52, 1).map(([x, y]) => [x, y]);
+    m.push([qx, qy - 150]);
+    cpw(m, 10, 7);
+  });
+  // extra resonators / control lines for richness
+  [[400, 1500], [1650, 1500], [300, 700], [1750, 700]].forEach(([x, y], k) => {
+    cpw(meander(x, y, 7, (k % 2 ? -1 : 1) * 180, 46), 10, 7);
+  });
+  cpw([[130, 1024], [Q[0][0] - 220, 1024], [Q[0][0] - 150, 1024]], 10, 7);
+  cpw([[S - 130, 1024], [Q[1][0] + 220, 1024], [Q[1][0] + 150, 1024]], 10, 7);
+  cpw([[Q[0][0], S - 130], [Q[0][0], Q[0][1] + 150]], 10, 7);
+  cpw([[Q[1][0], S - 130], [Q[1][0], Q[1][1] + 150]], 10, 7);
+  // coupler between qubits
+  cpw([[Q[0][0] + 130, 1024], [Q[1][0] - 130, 1024]], 12, 7);
+  // Xmon crosses
+  Q.forEach(([qx, qy]) => {
+    g.fillStyle = '#59626e'; g.fillRect(qx - 130, qy - 26, 260, 52); g.fillRect(qx - 26, qy - 130, 52, 260);
+    g.fillStyle = '#e8ecef'; g.fillRect(qx - 118, qy - 14, 236, 28); g.fillRect(qx - 14, qy - 118, 28, 236);
+  });
+  g.fillStyle = '#59626e'; g.font = '700 54px IT, sans-serif';
+  g.fillText('Q0', Q[0][0] - 60, Q[0][1] + 230); g.fillText('Q1', Q[1][0] + 10, Q[1][1] + 230);
+  g.font = '700 40px IT, sans-serif'; g.fillText('2Q-BELL  R7', 150, S - 170);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
+  return t;
+}
+
+// =============== WORLD A: the dilution refrigerator ("chandelier") ===============
+const A = new THREE.Group(); scene.add(A);
+const plates = [[6.35, 1.95, 0.14, M.steel], [5.6, 1.7, 0.1, M.gold], [4.5, 1.55, 0.1, M.gold], [3.4, 1.4, 0.1, M.gold], [2.4, 1.25, 0.09, M.gold], [1.5, 1.1, 0.09, M.gold], [0.8, 0.95, 0.09, M.gold]];
+const bolt = new THREE.CylinderGeometry(0.035, 0.035, 0.05, 12);
+plates.forEach(([y, r, h, mat], i) => {
+  const p = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, 128), mat)); p.position.y = y; A.add(p);
+  const lip = shadowed(new THREE.Mesh(new THREE.TorusGeometry(r, h * 0.35, 12, 128), M.goldSatin)); lip.rotation.x = Math.PI / 2; lip.position.y = y; A.add(lip);
+  const n = 28, bolts = new THREE.InstancedMesh(bolt, M.steel, n); const m4 = new THREE.Matrix4();
+  for (let k = 0; k < n; k++) { const a = (k / n) * Math.PI * 2; m4.makeTranslation(Math.cos(a) * r * 0.9, y + h / 2 + 0.02, Math.sin(a) * r * 0.9); bolts.setMatrixAt(k, m4); }
+  A.add(bolts);
+  if (i < plates.length - 1) {
+    const [y2, r2] = plates[i + 1];
+    for (let k = 0; k < 6; k++) {
+      const a = (k / 6) * Math.PI * 2 + (i % 2) * 0.5, rr = r2 * 0.86;
+      const rod = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, y - y2, 16), k % 2 ? M.gold : M.goldSatin));
+      rod.position.set(Math.cos(a) * rr, (y + y2) / 2, Math.sin(a) * rr); A.add(rod);
+    }
+  }
+});
+// central still / heat exchanger stack
+[[5.05, 0.42, 0.9], [3.95, 0.36, 0.9], [2.9, 0.3, 0.85], [1.95, 0.26, 0.75], [1.15, 0.22, 0.6]].forEach(([y, r, h]) => {
+  const c = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, 64), M.steel)); c.position.y = y; A.add(c);
+  for (let k = 0; k < 5; k++) { const ring = new THREE.Mesh(new THREE.TorusGeometry(r + 0.01, 0.018, 8, 64), M.copper); ring.rotation.x = Math.PI / 2; ring.position.y = y - h / 2 + (k + 0.5) * h / 5; A.add(ring); }
+});
+// coax lines with pigtail coils
+for (let c = 0; c < 10; c++) {
+  const a0 = (c / 10) * Math.PI * 2 + 0.2, r0 = 0.62 + (c % 3) * 0.1;
+  const pts = [];
+  const top = 6.3, bot = 0.86;
+  for (let s = 0; s <= 360; s++) {
+    const u = s / 360, y = lerp(top, bot, u);
+    let rr = r0, a = a0;
+    // coil section between two plates (pigtail)
+    const coilC = 3.95 - (c % 3) * 1.05, d = (y - coilC) / 0.38;
+    if (Math.abs(d) < 1) { const w = Math.cos(d * Math.PI / 2) ** 2; a += Math.sin(d * Math.PI * 5) * 0.12 * w; rr += Math.cos(d * Math.PI * 5) * 0.09 * w; }
+    pts.push(v3(Math.cos(a) * rr, y, Math.sin(a) * rr));
+  }
+  const tube = shadowed(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 600, 0.022, 8), c % 2 ? M.copper : M.steel));
+  A.add(tube);
+  plates.slice(1).forEach(([y]) => { const at = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.16, 16), M.gold)); at.position.set(Math.cos(a0) * r0, y - 0.13, Math.sin(a0) * r0); A.add(at); });
+}
+// sample holder + chip
+const CHIP_TEX = chipTexture();
+const finger = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.62, 32), M.gold)); finger.position.y = 0.45; A.add(finger);
+const holder = shadowed(new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.6, 0.15), M.gold)); holder.position.set(0, -0.1, 0); A.add(holder);
+const dieA = new THREE.Mesh(new THREE.PlaneGeometry(0.22, 0.22), new THREE.MeshStandardMaterial({ map: CHIP_TEX, metalness: 0.55, roughness: 0.32 }));
+dieA.position.set(0, -0.1, 0.0755); A.add(dieA);
+for (let k = 0; k < 4; k++) { const sma = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.12, 16), M.steel)); sma.position.set(-0.21 + k * 0.14, 0.24, 0); A.add(sma); }
+const DIE_A_CENTER = v3(0, -0.1, 0.0755);
+
+// =============== WORLD B: inside the chip, the circuit ===============
+const B = new THREE.Group(); scene.add(B);
+const DIE = 9;
+const dieB = new THREE.Mesh(new THREE.PlaneGeometry(DIE, DIE), new THREE.MeshStandardMaterial({ map: CHIP_TEX, metalness: 0.55, roughness: 0.32 }));
+dieB.rotation.x = -Math.PI / 2; dieB.receiveShadow = true; B.add(dieB);
+const siC = document.createElement('canvas'); siC.width = siC.height = 512;
+{ const g = siC.getContext('2d'); g.fillStyle = '#c3c9d0'; g.fillRect(0, 0, 512, 512);
+  g.strokeStyle = '#8d96a1'; g.lineWidth = 3;
+  [[0, 128, 512, 128], [0, 140, 512, 140], [384, 0, 384, 512], [396, 0, 396, 512]].forEach(([a, b, c, d]) => { g.beginPath(); g.moveTo(a, b); g.lineTo(c, d); g.stroke(); });
+  g.fillStyle = '#d4a855'; g.fillRect(40, 300, 70, 70); g.fillRect(230, 40, 50, 50);
+  g.strokeStyle = '#9aa3ad'; g.lineWidth = 2; g.beginPath(); for (let i = 0; i < 6; i++) { g.moveTo(150, 250 + i * 30); g.lineTo(330, 250 + i * 30); } g.stroke(); }
+const siTex = new THREE.CanvasTexture(siC); siTex.colorSpace = THREE.SRGBColorSpace; siTex.wrapS = siTex.wrapT = THREE.RepeatWrapping; siTex.repeat.set(40, 40); siTex.anisotropy = 8;
+const surround = new THREE.Mesh(new THREE.PlaneGeometry(160, 160), new THREE.MeshStandardMaterial({ map: siTex, metalness: 0.5, roughness: 0.38 }));
+surround.rotation.x = -Math.PI / 2; surround.position.y = -0.02; surround.receiveShadow = true; B.add(surround);
+
+const QX = [-(188 / 2048) * DIE, (188 / 2048) * DIE]; // Xmon positions in world B
+const WIRE_Y = 0.78, R = 0.52;
+// Xmon highlight crosses
+const xmons = QX.map((x) => {
+  const g = new THREE.Group(); g.position.set(x, 0.012, 0);
+  const mat = new THREE.MeshStandardMaterial({ color: '#2340ff', metalness: 0.2, roughness: 0.4, transparent: true, opacity: 0 });
+  const a = new THREE.Mesh(new THREE.BoxGeometry(1.04, 0.02, 0.13), mat), b = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.02, 1.04), mat);
+  g.add(a, b); g.userData.mat = mat; B.add(g); return g;
+});
+// rails (circuit wires) that grow forward
+const RAIL_LEN = 31;
+const rails = QX.map((x) => {
+  const geo = new THREE.CylinderGeometry(0.032, 0.032, RAIL_LEN, 16); geo.rotateX(Math.PI / 2); geo.translate(0, 0, -RAIL_LEN / 2);
+  const m = shadowed(new THREE.Mesh(geo, M.gold)); m.position.set(x, WIRE_Y, 0); B.add(m); return m;
+});
+// Bloch spheres
+function makeQubit(x) {
+  const g = new THREE.Group(); g.position.set(x, WIRE_Y, 0);
+  const sph = new THREE.Mesh(new THREE.SphereGeometry(R, 64, 48), M.glass); sph.renderOrder = 2; g.add(sph);
+  const eq = new THREE.Mesh(new THREE.TorusGeometry(R, 0.009, 8, 128), M.line); eq.rotation.x = Math.PI / 2; g.add(eq);
+  const mer = new THREE.Mesh(new THREE.TorusGeometry(R, 0.006, 8, 128), M.line); g.add(mer);
+  const axis = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, R * 2.3, 8), M.line); g.add(axis);
+  const dot = shadowed(new THREE.Mesh(new THREE.SphereGeometry(0.06, 24, 16), M.cobalt)); g.add(dot);
+  const arrow = new THREE.Group(); g.add(arrow);
+  const shaftGeo = new THREE.CylinderGeometry(0.032, 0.032, 1, 16); shaftGeo.translate(0, 0.5, 0);
+  const shaft = shadowed(new THREE.Mesh(shaftGeo, M.cobalt)); arrow.add(shaft);
+  const coneGeo = new THREE.ConeGeometry(0.085, 0.2, 24); coneGeo.translate(0, 0.1, 0);
+  const cone = shadowed(new THREE.Mesh(coneGeo, M.cobalt)); arrow.add(cone);
+  const shadowCatcher = shadowed(new THREE.Mesh(new THREE.SphereGeometry(R * 0.995, 32, 24), new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false })));
+  shadowCatcher.castShadow = false; shadowCatcher.receiveShadow = false;
+  g.userData = { arrow, shaft, cone };
+  B.add(g); return g;
+}
+const qubits = QX.map(makeQubit);
+const UP = v3(0, 1, 0);
+function setArrow(q, dir, len) {
+  const { arrow, shaft, cone } = q.userData;
+  arrow.quaternion.setFromUnitVectors(UP, dir.clone().normalize());
+  const L = Math.max(0.0001, len * (R - 0.2));
+  shaft.scale.set(1, L, 1);
+  cone.position.y = L; const cs = clamp01(len * 3); cone.scale.set(cs || 1e-4, cs || 1e-4, cs || 1e-4);
+  shaft.visible = len > 0.01; cone.visible = len > 0.01;
+}
+// portals
+function frame(w, h, depth = 0.24, bar = 0.11, mat = M.gold) {
+  const g = new THREE.Group();
+  const top = shadowed(new THREE.Mesh(new THREE.BoxGeometry(w + bar, bar, depth), mat)); top.position.y = h / 2; g.add(top);
+  const l = shadowed(new THREE.Mesh(new THREE.BoxGeometry(bar, h, depth), mat)); l.position.x = -w / 2; g.add(l);
+  const r = l.clone(); r.position.x = w / 2; g.add(r);
+  // feet
+  [-w / 2, w / 2].forEach((x) => { const f = shadowed(new THREE.Mesh(new THREE.BoxGeometry(bar * 2.4, 0.05, depth * 2.2), mat)); f.position.set(x, -h / 2 + 0.02, 0); g.add(f); });
+  return g;
+}
+const Z_H = -5.5, Z_CX = -13.5, Z_M = -23.0, Z_STOP3 = -23.6;
+const PH = 1.7; // portal height (wire centred at 0.85 -> spans 0..~1.86)
+const hPortal = frame(1.5, PH); hPortal.position.set(QX[0], PH / 2, Z_H); B.add(hPortal);
+const cxPortal = frame(QX[1] - QX[0] + 1.5, PH); cxPortal.position.set(0, PH / 2, Z_CX); B.add(cxPortal);
+const meters = QX.map((x) => { const m = frame(1.3, PH, 0.2, 0.09, M.steel); m.position.set(x, PH / 2, Z_M); B.add(m); return m; });
+// emblems
+let hEmblem;
+const cxEmblem = new THREE.Group();
+{
+  const d = shadowed(new THREE.Mesh(new THREE.SphereGeometry(0.15, 32, 24), M.ink)); d.position.x = QX[0]; cxEmblem.add(d);
+  const ring = shadowed(new THREE.Mesh(new THREE.TorusGeometry(0.27, 0.05, 16, 64), M.ink)); ring.position.x = QX[1]; cxEmblem.add(ring);
+  const v = shadowed(new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.54, 0.06), M.ink)); v.position.x = QX[1]; cxEmblem.add(v);
+  const hh = shadowed(new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.06, 0.06), M.ink)); hh.position.x = QX[1]; cxEmblem.add(hh);
+  const link = shadowed(new THREE.Mesh(new THREE.BoxGeometry(QX[1] - QX[0], 0.05, 0.05), M.ink)); cxEmblem.add(link);
+  cxEmblem.position.set(0, PH + 0.48, 0); cxPortal.add(cxEmblem); cxEmblem.position.y = PH / 2 + 0.36; cxEmblem.scale.setScalar(0.8);
+}
+meters.forEach((m) => {
+  const g = new THREE.Group();
+  const arc = shadowed(new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.04, 12, 48, Math.PI), M.ink)); g.add(arc);
+  const needle = shadowed(new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.36, 0.04), M.ink)); needle.geometry.translate(0, 0.18, 0); needle.rotation.z = -0.6; g.add(needle);
+  g.position.y = PH / 2 + 0.3; m.add(g);
+});
+// entanglement thread (bezier arc between the two sphere centres)
+const threadCurve = new THREE.CubicBezierCurve3(v3(QX[0], 0, 0), v3(QX[0] + 0.3, 1.25, 0), v3(QX[1] - 0.3, 1.25, 0), v3(QX[1], 0, 0));
+const threadGeo = new THREE.TubeGeometry(threadCurve, 120, 0.028, 10);
+const thread = shadowed(new THREE.Mesh(threadGeo, M.cobalt)); B.add(thread);
+const THREAD_IDX = threadGeo.index.count;
+// measurement towers
+const SLOT_X = [-2.1, -0.7, 0.7, 2.1], Z_T = -28.6;
+const pads = SLOT_X.map((x) => { const p = shadowed(new THREE.Mesh(new THREE.BoxGeometry(1.16, 0.05, 1.16), M.gold)); p.position.set(x, 0.025, Z_T); B.add(p); return p; });
+const N = 1000, CUBE = 0.16, STEP = 0.18;
+function mulberry32(a) { return () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+const rnd = mulberry32(20261118);
+const results = [], towerIdx = [], c00 = [0]; let n0 = 0, n1 = 0;
+for (let i = 0; i < N; i++) { const r = rnd() < 0.5 ? 0 : 1; results.push(r); towerIdx.push(r ? n1++ : n0++); c00.push(c00[i] + (r ? 0 : 1)); }
+const M0 = 25.7, M1 = 29.7, P = 3, FLIGHT = 0.5;
+const shotT = (i) => M0 + (M1 - M0) * Math.pow((i + 1) / N, 1 / P);
+const cubes = new THREE.InstancedMesh(new THREE.BoxGeometry(CUBE, CUBE, CUBE), M.cobalt, N);
+cubes.castShadow = true; cubes.receiveShadow = true; cubes.frustumCulled = false; B.add(cubes);
+function cubeHome(i) {
+  const k = towerIdx[i], layer = Math.floor(k / 36), cell = k % 36;
+  const x = SLOT_X[results[i] ? 3 : 0] + ((cell % 6) - 2.5) * STEP, z = Z_T + (Math.floor(cell / 6) - 2.5) * STEP;
+  return v3(x, 0.05 + CUBE / 2 + layer * STEP, z);
+}
+
+// 3D "H" letter
+const fontReady = new Promise((res) => new FontLoader().load('node_modules/three/examples/fonts/helvetiker_bold.typeface.json', (font) => {
+  const geo = new TextGeometry('H', { font, size: 0.5, depth: 0.12, curveSegments: 8, bevelEnabled: true, bevelThickness: 0.015, bevelSize: 0.012, bevelSegments: 3 });
+  geo.center();
+  hEmblem = shadowed(new THREE.Mesh(geo, M.ink)); hEmblem.position.y = PH / 2 + 0.42; hPortal.add(hEmblem);
+  res();
+}));
+
+// ---------------- camera rigs ----------------
+const camA = (t) => {
+  // crane down the chandelier while orbiting, then dive to the chip
+  const u1 = E.inOut2(seg(t, 0, 5.2));
+  let th = lerp(0.55, 0.95, u1), Rr = lerp(7.2, 5.6, u1), y = lerp(6.4, 2.2, u1), ty = lerp(5.0, 1.5, u1);
+  let pos = v3(Math.sin(th) * Rr, y, Math.cos(th) * Rr), tgt = v3(0, ty, 0);
+  if (t > 4.6) {
+    const u2 = E.inOut3(seg(t, 4.6, 7.4));
+    const th2 = lerp(th, 0, u2), R2 = lerp(Rr, 1.5, u2);
+    pos = v3(Math.sin(th2) * R2, lerp(y, DIE_A_CENTER.y, u2), Math.cos(th2) * R2);
+    tgt = lerpV(tgt, DIE_A_CENTER, E.out3(seg(t, 4.6, 6.8)));
+  }
+  if (t > 7.4) {
+    const u3 = E.in3(seg(t, 7.4, 8.6));
+    pos = v3(0, DIE_A_CENTER.y, lerp(1.5 + DIE_A_CENTER.z, DIE_A_CENTER.z + 0.48, u3));
+    tgt = DIE_A_CENTER.clone();
+  }
+  return { pos, tgt, up: v3(0, 1, 0) };
+};
+const SZ = (t) => { // z of the qubits along the circuit
+  if (t < 13.6) return 0;
+  if (t < 16.4) return lerp(0, -9, E.inOut2(seg(t, 13.6, 16.4)));
+  if (t < 17.2) return -9;
+  if (t < 19.6) return lerp(-9, -17, E.inOut2(seg(t, 17.2, 19.6)));
+  if (t < 24.0) return -17;
+  return lerp(-17, Z_STOP3, E.inOut3(seg(t, 24.0, 25.4)));
+};
+const rig = {
+  top: () => ({ pos: v3(0, 0.48 * (DIE / 0.22) * Math.tan(THREE.MathUtils.degToRad(17.5)) / Math.tan(THREE.MathUtils.degToRad(22.5)), 0), tgt: v3(0, 0, 0), up: v3(0, 0, -1) }),
+  intro: (t) => ({ pos: v3(lerp(0, 0.35, seg(t, 10, 14)), lerp(3.6, 3.3, seg(t, 10, 14)), lerp(5.0, 4.7, seg(t, 10, 14))), tgt: v3(0, 0.55, -2.2), up: v3(0, 1, 0) }),
+  follow: (t) => { const s = SZ(t); return { pos: v3(0.55, 3.35, s + 5.1), tgt: v3(0, 0.6, s - 3.4), up: v3(0, 1, 0) }; },
+  side: (t) => { const s = SZ(t), a = 0.85 + (t - 19.5) * 0.06; const c = v3(0, 1.0, s); return { pos: v3(c.x + Math.sin(a) * 5.4, 2.3, c.z + Math.cos(a) * 5.4), tgt: c.clone().add(v3(0, -0.05, -0.4)), up: v3(0, 1, 0) }; },
+  measure: (t) => { const u = seg(t, 25.4, 30.6); return { pos: v3(lerp(1.4, 1.0, u), lerp(6.9, 6.5, u), lerp(-16.4, -17.2, u)), tgt: v3(0, 0.75, -27.0), up: v3(0, 1, 0) }; },
+  final: (t) => { const a = -0.05 + (t - 30.6) * 0.05; const c = v3(0.3, 1.25, -28.0); return { pos: v3(c.x + Math.sin(a) * 11.2, 5.4, c.z + Math.cos(a) * 10.8), tgt: c, up: v3(0, 1, 0) }; },
+};
+const blend = (a, b, u) => ({ pos: lerpV(a.pos, b.pos, u), tgt: lerpV(a.tgt, b.tgt, u), up: lerpV(a.up, b.up, u).normalize() });
+function camB(t) {
+  if (t < 10.8) {
+    // continue the dive: the chip surface becomes the floor
+    const u = E.out3(seg(t, 8.6, 10.8));
+    const a = rig.top(), b = rig.intro(t);
+    const r = blend(a, b, u);
+    r.pos.y = lerp(a.pos.y, b.pos.y, E.out4(seg(t, 8.6, 10.8)));
+    return r;
+  }
+  if (t < 13.4) return rig.intro(t);
+  if (t < 14.6) return blend(rig.intro(t), rig.follow(t), E.inOut2(seg(t, 13.4, 14.6)));
+  if (t < 19.4) return rig.follow(t);
+  if (t < 20.8) return blend(rig.follow(t), rig.side(t), E.inOut2(seg(t, 19.4, 20.8)));
+  if (t < 23.8) return rig.side(t);
+  if (t < 25.6) return blend(rig.side(t), rig.measure(t), E.inOut2(seg(t, 23.8, 25.6)));
+  if (t < 30.4) return rig.measure(t);
+  if (t < 32.4) return blend(rig.measure(t), rig.final(t), E.inOut2(seg(t, 30.4, 32.4)));
+  return rig.final(t);
+}
+
+// ---------------- DOM text ----------------
+function splitWords(el) {
+  const out = [];
+  [...el.childNodes].forEach((n) => {
+    if (n.nodeType === 3) {
+      const frag = document.createDocumentFragment();
+      n.textContent.split(/(\s+)/).forEach((p) => {
+        if (!p) return;
+        if (/^\s+$/.test(p)) { frag.appendChild(document.createTextNode(p)); return; }
+        const s = document.createElement('span'); s.className = 'w'; s.textContent = p; frag.appendChild(s); out.push(s);
+      });
+      n.replaceWith(frag);
+    }
+  });
+  return out;
+}
+const TITLES = {}; ['t1', 't2', 't3', 't4', 't5', 't6', 't7'].forEach((id) => (TITLES[id] = splitWords($('#' + id))));
+// [id, in, out, style]
+const TEXT = [
+  ['t1', -1, 4.75, 'none'], ['s1', 1.4, 4.75, 'blur'],
+  ['t2', 5.05, 8.4, 'words'],
+  ['t3', 9.6, 13.2, 'grey'], ['s3', 10.9, 13.2, 'blur'],
+  ['t4', 13.45, 16.9, 'line'], ['s4', 15.2, 16.9, 'blur'],
+  ['t5', 17.1, 23.5, 'words'], ['s5a', 19.0, 21.1, 'blur'], ['s5b', 21.25, 23.5, 'blur'],
+  ['t6', 23.7, 30.35, 'grey'], ['s6', 25.6, 30.35, 'blur'],
+  ['t7', 30.6, 99, 'words'], ['formula', 31.7, 99, 'line'], ['s7', 33.0, 99, 'blur'],
+];
+function textAt(t) {
+  for (const [id, a, b, style] of TEXT) {
+    const el = $('#' + id);
+    const outU = seg(t, b - 0.16, b); // blur-out exit (shorter than entrance)
+    let op = 1, blur = 0;
+    if (t < a) { op = 0; }
+    else if (style === 'none') { op = 1; }
+    else if (style === 'blur' || style === 'line') { const u = E.out3(seg(t, a, a + (style === 'line' ? 0.22 : 0.2))); op = u; blur = (1 - u) * 8; }
+    if (style === 'words' || style === 'grey') {
+      el.style.opacity = t < a ? 0 : 1;
+      TITLES[id].forEach((w, i) => {
+        if (style === 'words') { const u = E.out3(seg(t, a + i * 0.075, a + i * 0.075 + 0.15)); w.style.opacity = u; w.style.filter = `blur(${(1 - u) * 6}px)`; }
+        else { const u = E.out3(seg(t, a + i * 0.09, a + i * 0.09 + 0.22)); w.style.opacity = 0.25 + 0.75 * u; w.style.color = u < 1 ? `rgb(${lerp(170, 18, u)},${lerp(160, 18, u)},${lerp(150, 18, u)})` : ''; }
+      });
+      op = t < a ? 0 : 1;
+    }
+    op *= 1 - outU; blur += outU * 10;
+    el.style.opacity = op; el.style.filter = blur > 0.05 ? `blur(${blur}px)` : '';
+  }
+}
+const _p = new THREE.Vector3();
+function tag(id, pos, op, dx = 0, dy = 0, centre = true) {
+  const el = $('#' + id);
+  _p.copy(pos).project(camera);
+  const x = (_p.x + 1) / 2 * W, y = (1 - _p.y) / 2 * H;
+  const w = el.offsetWidth, h = el.offsetHeight;
+  el.style.transform = `translate(${x + dx - (centre ? w / 2 : 0)}px, ${y + dy - h / 2}px)`;
+  el.style.opacity = _p.z < 1 ? op : 0;
+}
+
+// ---------------- the frame function ----------------
+function frameAt(t) {
+  const inA = t < 8.6;
+  A.visible = inA; B.visible = !inA;
+  const c = inA ? camA(t) : camB(t);
+  camera.fov = inA ? 35 : 45; camera.updateProjectionMatrix();
+  camera.position.copy(c.pos); camera.up.copy(c.up); camera.lookAt(c.tgt);
+  camera.updateMatrixWorld();
+
+  // lights + fog follow the action
+  if (inA) {
+    scene.fog.near = 9; scene.fog.far = 24;
+    const f = v3(0, lerp(3.5, 0.4, seg(t, 0, 8)), 0);
+    key.position.copy(f).add(v3(-4.5, 7, 5)); key.target.position.copy(f);
+    rim.position.copy(f).add(v3(5, 4, -6)); rim.target.position.copy(f);
+    Object.assign(key.shadow.camera, { left: -4, right: 4, top: 5, bottom: -5, near: 0.5, far: 30 });
+  } else {
+    scene.fog.near = lerp(60, 10, seg(t, 8.8, 10.8)); scene.fog.far = lerp(120, 40, seg(t, 8.8, 10.8));
+    const fz = c.tgt.z;
+    const f = v3(0, 0, fz);
+    key.position.copy(f).add(v3(-6, 11, 6)); key.target.position.copy(f);
+    rim.position.copy(f).add(v3(6, 5, -8)); rim.target.position.copy(f);
+    Object.assign(key.shadow.camera, { left: -11, right: 11, top: 11, bottom: -11, near: 0.5, far: 40 });
+  }
+  key.shadow.camera.updateProjectionMatrix();
+
+  // ---- world B animation ----
+  const sz = SZ(t);
+  xmons.forEach((x) => { x.userData.mat.opacity = E.out3(seg(t, 9.0, 9.5)) * (1 - 0.6 * seg(t, 11.0, 12.0)); });
+  qubits.forEach((q, i) => {
+    const u = seg(t, 9.25 + i * 0.12, 10.35 + i * 0.12);
+    const s = Math.max(1e-4, E.spring(u, 0.6, 12));
+    q.scale.setScalar(s);
+    q.position.set(QX[i], lerp(0.15, WIRE_Y, E.out3(u)), sz);
+  });
+  rails.forEach((r, i) => { r.scale.z = Math.max(1e-4, E.inOut3(seg(t, 11.1 + i * 0.12, 12.8 + i * 0.12))); });
+  // portals arrive
+  const drop = (obj, ta, y0) => { const u = seg(t, ta, ta + 0.75); obj.position.y = y0 + (1 - E.spring(u, 0.5, 13)) * 7; obj.visible = t >= ta; };
+  drop(hPortal, 12.6, PH / 2);
+  drop(cxPortal, 16.5, PH / 2);
+  meters.forEach((m, i) => { const u = E.backOut(seg(t, 23.5 + i * 0.12, 24.1 + i * 0.12), 1.4); m.scale.set(1, Math.max(1e-4, u), 1); m.position.y = (PH / 2) * u; m.visible = t >= 23.5; });
+  pads.forEach((p, i) => { const u = E.out3(seg(t, 24.6 + i * 0.07, 25.1 + i * 0.07)); p.scale.setScalar(Math.max(1e-4, u)); });
+
+  // Bloch arrows
+  let d0 = v3(0, 1, 0), d1 = v3(0, 1, 0), l0 = 1, l1 = 1;
+  const hU = E.inOut3(seg(t, 14.55, 15.6)); // through the H portal
+  d0 = v3(Math.sin(hU * Math.PI / 2), Math.cos(hU * Math.PI / 2), 0);
+  const cxU = E.inOut2(seg(t, 18.15, 19.1)); // through CNOT: each reduced state becomes maximally mixed
+  l0 = l1 = 1 - cxU;
+  let shotsDone = 0;
+  if (t >= M0) {
+    // binary search shots launched
+    let lo = 0, hi = N; while (lo < hi) { const m = (lo + hi) >> 1; if (shotT(m) <= t) lo = m + 1; else hi = m; }
+    shotsDone = lo;
+    if (shotsDone > 0) { const r = results[shotsDone - 1]; d0 = d1 = v3(0, r ? -1 : 1, 0); l0 = l1 = 1; }
+  }
+  setArrow(qubits[0], d0, l0); setArrow(qubits[1], d1, l1);
+
+  // thread
+  const thU = E.inOut2(seg(t, 18.4, 19.4));
+  thread.visible = thU > 0;
+  threadGeo.setDrawRange(0, Math.floor(THREAD_IDX * thU / 3) * 3);
+  thread.position.set(0, WIRE_Y, sz);
+
+  // cubes
+  const m4 = new THREE.Matrix4(), q4 = new THREE.Quaternion(), s4 = new THREE.Vector3();
+  const launch = v3(0, WIRE_Y + 0.3, Z_STOP3 - 0.2);
+  for (let i = 0; i < N; i++) {
+    const ti = shotT(i);
+    if (t < ti) { m4.makeScale(0, 0, 0); cubes.setMatrixAt(i, m4); continue; }
+    const home = cubeHome(i), u = seg(t, ti, ti + FLIGHT), e = E.inOut2(u);
+    const p = lerpV(launch, home, e); p.y += Math.sin(Math.PI * e) * 2.2;
+    const spin = (1 - e) * 3.0 * (i % 2 ? 1 : -1);
+    q4.setFromEuler(new THREE.Euler(spin, spin * 0.7, 0)); s4.setScalar(lerp(0.5, 1, E.out3(seg(t, ti, ti + 0.15))));
+    m4.compose(p, q4, s4); cubes.setMatrixAt(i, m4);
+  }
+  cubes.instanceMatrix.needsUpdate = true;
+  $('#counter').textContent = shotsDone.toLocaleString('en-US');
+
+  renderer.render(scene, camera);
+
+  // ---- DOM ----
+  textAt(t);
+  // match-cut flash: a light blur swap across the cut
+  const fl = Math.max(0, 1 - Math.abs(t - 8.6) / 0.14);
+  $('#c').style.filter = fl > 0.01 ? `blur(${fl * 7}px)` : '';
+  $('#flash').style.opacity = fl * 0.25;
+  const tagsOn = !inA;
+  const qOp = tagsOn ? E.out3(seg(t, 10.2, 10.6)) * (1 - seg(t, 23.6, 23.9)) : 0;
+  tag('tq0', v3(QX[0], WIRE_Y + R + 0.32, sz), qOp, 0, 0);
+  tag('tq1', v3(QX[1], WIRE_Y + R + 0.32, sz), qOp, 0, 0);
+  const kOp = tagsOn ? E.out3(seg(t, 25.0, 25.4)) : 0;
+  ['k00', 'k01', 'k10', 'k11'].forEach((id, i) => tag(id, v3(SLOT_X[i], 0.0, Z_T + 1.0), kOp, 0, 26));
+  const nOp = tagsOn ? E.out3(seg(t, 29.9, 30.2)) : 0;
+  tag('n01', v3(SLOT_X[1], 0.35, Z_T), nOp, 0, 0); tag('n10', v3(SLOT_X[2], 0.35, Z_T), nOp, 0, 0);
+}
+
+window.__duration = DUR;
+window.__seek = (t) => frameAt(Math.max(0, Math.min(DUR - 1e-4, t)));
+window.__ready = Promise.all([document.fonts.load('700 54px IT'), document.fonts.ready, fontReady]).then(() => { chipTexture(); CHIP_TEX.image = CHIP_CANVAS; CHIP_TEX.needsUpdate = true; frameAt(0); return true; });
+if (location.search.includes('play')) { const s = performance.now(); const f = () => { window.__seek(((performance.now() - s) / 1000) % DUR); requestAnimationFrame(f); }; f(); }
+</script>
+</body>
+</html>
