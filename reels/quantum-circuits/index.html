@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Entangle Two Qubits</title>
+<style>
+  @font-face { font-family: 'SG'; font-weight: 500; src: url('node_modules/@fontsource/space-grotesk/files/space-grotesk-latin-500-normal.woff2') format('woff2'); }
+  @font-face { font-family: 'SG'; font-weight: 700; src: url('node_modules/@fontsource/space-grotesk/files/space-grotesk-latin-700-normal.woff2') format('woff2'); }
+  @font-face { font-family: 'JBM'; font-weight: 700; src: url('node_modules/@fontsource/jetbrains-mono/files/jetbrains-mono-latin-700-normal.woff2') format('woff2'); }
+  @font-face { font-family: 'JBMX'; font-weight: 700; src: url('node_modules/@fontsource/jetbrains-mono/files/jetbrains-mono-math-700-normal.woff2') format('woff2'); }
+  :root { --ground:#F6D24A; --ink:#141414; --cobalt:#2538F0; --red:#E3432B; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { width:1080px; height:1920px; overflow:hidden; background:var(--ground); }
+  #stage { position:relative; width:1080px; height:1920px; background:var(--ground); color:var(--ink);
+           font-family:'SG', 'Inter', sans-serif; font-weight:700; overflow:hidden; }
+  .ket { font-family:'SG', 'JBMX', 'DejaVu Sans', sans-serif; }
+  /* halftone band in the platform-UI zone */
+  #halftone { position:absolute; left:0; right:0; top:1340px; bottom:0;
+    background-image: radial-gradient(circle, rgba(20,20,20,.16) 2.6px, transparent 3px);
+    background-size: 18px 18px;
+    -webkit-mask-image: linear-gradient(to bottom, transparent, #000 70%); mask-image: linear-gradient(to bottom, transparent, #000 70%); }
+  .title { position:absolute; left:90px; top:200px; width:880px; font-size:96px; line-height:1.0; letter-spacing:-0.025em; }
+  .title .w { display:inline-block; white-space:pre; }
+  .sub { position:absolute; left:92px; top:418px; width:860px; font-size:44px; font-weight:500; line-height:1.15; letter-spacing:-0.01em; }
+  #circuit { position:absolute; left:0; top:0; width:1080px; height:1920px; }
+  .lbl { position:absolute; font-size:46px; line-height:1; }
+  #chart { position:absolute; left:0; top:0; width:1080px; height:1920px; }
+  .slot { position:absolute; top:880px; width:150px; height:340px; }
+  .slot .pct { position:absolute; left:0; right:0; top:0; text-align:center; font-size:44px; color:var(--cobalt); }
+  .slot .bar { position:absolute; left:0; right:0; bottom:0; height:280px; transform-origin:50% 100%; }
+  .slot .inner { position:absolute; inset:0; background:var(--cobalt); transform-origin:50% 100%; }
+  .axis { position:absolute; left:110px; width:860px; top:1220px; height:5px; background:var(--ink); }
+  .klabel { position:absolute; top:1240px; width:150px; text-align:center; font-size:44px; }
+  .never { position:absolute; top:1110px; width:190px; text-align:center; font-size:40px; color:var(--red);
+           border:5px solid var(--red); padding:6px 0 8px; letter-spacing:.02em; }
+  #formula { position:absolute; left:0; width:1080px; top:600px; text-align:center; font-size:98px; color:var(--cobalt); letter-spacing:-0.02em; }
+  #counter { font-variant-numeric: tabular-nums; }
+  .roll { display:inline-block; height:96px; line-height:96px; overflow:hidden; vertical-align:top; }
+  #rollInner { display:block; }
+  #rollInner > span { display:block; height:96px; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="halftone"></div>
+
+  <!-- circuit -->
+  <svg id="circuit" viewBox="0 0 1080 1920" xmlns="http://www.w3.org/2000/svg">
+    <g id="circ" font-family="SG, sans-serif" font-weight="700">
+      <line id="wire0" x1="250" y1="610" x2="900" y2="610" stroke="#141414" stroke-width="6"/>
+      <line id="wire1" x1="250" y1="770" x2="900" y2="770" stroke="#141414" stroke-width="6"/>
+      <line id="tint0" x1="415" y1="610" x2="415" y2="610" stroke="#2538F0" stroke-width="10"/>
+      <line id="tint1" x1="614" y1="770" x2="614" y2="770" stroke="#2538F0" stroke-width="10"/>
+      <!-- H gate -->
+      <g id="hgate"><rect x="305" y="555" width="110" height="110" fill="#F6D24A" stroke="#141414" stroke-width="6"/>
+        <text x="360" y="629" font-size="64" text-anchor="middle" fill="#141414">H</text></g>
+      <!-- CNOT -->
+      <line id="cline" x1="580" y1="610" x2="580" y2="804" stroke="#141414" stroke-width="6"/>
+      <circle id="cdot" cx="580" cy="610" r="17" fill="#141414"/>
+      <g id="ctarget"><circle cx="580" cy="770" r="34" fill="#F6D24A" stroke="#141414" stroke-width="6"/>
+        <line x1="580" y1="736" x2="580" y2="804" stroke="#141414" stroke-width="6"/>
+        <line x1="546" y1="770" x2="614" y2="770" stroke="#141414" stroke-width="6"/></g>
+      <!-- meters -->
+      <g id="meter0" class="meter"><rect x="765" y="555" width="110" height="110" fill="#F6D24A" stroke="#141414" stroke-width="6"/>
+        <path class="dial" d="M787 640 A33 33 0 0 1 853 640" fill="none" stroke="#141414" stroke-width="6"/>
+        <line class="dial" x1="820" y1="640" x2="844" y2="586" stroke="#141414" stroke-width="6"/>
+        <text id="res0" x="820" y="633" font-size="70" text-anchor="middle" fill="#2538F0" opacity="0">0</text></g>
+      <g id="meter1" class="meter"><rect x="765" y="715" width="110" height="110" fill="#F6D24A" stroke="#141414" stroke-width="6"/>
+        <path class="dial" d="M787 800 A33 33 0 0 1 853 800" fill="none" stroke="#141414" stroke-width="6"/>
+        <line class="dial" x1="820" y1="800" x2="844" y2="746" stroke="#141414" stroke-width="6"/>
+        <text id="res1" x="820" y="793" font-size="70" text-anchor="middle" fill="#2538F0" opacity="0">0</text></g>
+      <!-- playhead -->
+      <line id="playhead" x1="0" y1="520" x2="0" y2="860" stroke="#2538F0" stroke-width="8" opacity="0"/>
+    </g>
+  </svg>
+  <div id="circLabels">
+    <div class="lbl" id="q0" style="left:90px; top:587px;">q0 <span class="ket">|0⟩</span></div>
+    <div class="lbl" id="q1" style="left:90px; top:747px;">q1 <span class="ket">|0⟩</span></div>
+  </div>
+
+  <!-- state chart -->
+  <div id="chart">
+    <div class="axis"></div>
+    <div class="klabel ket" style="left:135px">|00⟩</div>
+    <div class="klabel ket" style="left:345px">|01⟩</div>
+    <div class="klabel ket" style="left:555px">|10⟩</div>
+    <div class="klabel ket" style="left:765px">|11⟩</div>
+    <div class="slot" id="slotA" style="left:135px"><div class="pct" id="pctA">100%</div><div class="bar" id="barA"><div class="inner" id="innerA"></div></div></div>
+    <div class="slot" id="slotB" style="left:135px"><div class="pct" id="pctB">50%</div><div class="bar" id="barB"><div class="inner" id="innerB"></div></div></div>
+    <div class="never" id="never01" style="left:325px">NEVER</div>
+    <div class="never" id="never10" style="left:535px">NEVER</div>
+  </div>
+
+  <div id="formula" class="ket">(|00⟩ + |11⟩) / √2</div>
+
+  <!-- titles -->
+  <div class="title" id="t1">How do qubits<br>get entangled?</div>
+  <div class="sub" id="s1">Two qubits. Two gates. Let’s build it.</div>
+
+  <div class="title" id="t2">Time runs<br>left to right.</div>
+  <div class="sub" id="s2">Each line is one qubit. Both start at 0.</div>
+
+  <div class="title" id="t3">Gate H splits<br>q0 in two.</div>
+  <div class="sub" id="s3">Equal parts 0 and 1, at the same time.</div>
+
+  <div class="title" id="t4">CNOT flips q1<br>only if q0 is 1.</div>
+  <div class="sub" id="s4">So the 10 half moves to 11.</div>
+  <div class="sub" id="s4b">Now the pair is one state: 00 or 11.</div>
+
+  <div class="title" id="t5">Measure it<br><span class="roll"><span id="rollInner"><span>10</span><span>100</span><span>1,000</span></span></span> times.</div>
+  <div class="sub" id="s5">Shot <span id="counter">0</span></div>
+
+  <div class="title" id="t6">The two qubits<br>always agree.</div>
+  <div class="sub" id="s6">That’s entanglement.</div>
+</div>
+
+<script src="node_modules/gsap/dist/gsap.min.js"></script>
+<script>
+(() => {
+  const $ = (s) => document.querySelector(s);
+  const DUR = 32.6;
+  const SLOT = { '00': 0, '01': 210, '10': 420, '11': 630 }; // x offsets from slot 00 (left:135)
+
+  // split titles into word spans (keeps <br> and nested spans like .roll)
+  function splitWords(el) {
+    const out = [];
+    [...el.childNodes].forEach((n) => {
+      if (n.nodeType === 3) {
+        const frag = document.createDocumentFragment();
+        n.textContent.split(/(\s+)/).forEach((p) => {
+          if (!p) return;
+          if (/^\s+$/.test(p)) { frag.appendChild(document.createTextNode(p)); return; }
+          const s = document.createElement('span'); s.className = 'w'; s.textContent = p; frag.appendChild(s); out.push(s);
+        });
+        n.replaceWith(frag);
+      } else if (n.nodeType === 1 && n.tagName !== 'BR') { n.classList.add('w'); out.push(n); }
+    });
+    return out;
+  }
+  const W = {};
+  ['t2', 't3', 't5', 't6'].forEach((id) => (W[id] = splitWords($('#' + id))));
+
+  const tl = gsap.timeline({ paused: true, defaults: { ease: 'expo.out' } });
+  const blurOut = (sel, at) => tl.to(sel, { opacity: 0, filter: 'blur(10px)', duration: 0.18, ease: 'power3.in' }, at);
+
+  // ---------- initial state ----------
+  gsap.set(['#t2','#s2','#t3','#s3','#t4','#s4','#s4b','#t5','#s5','#t6','#s6'], { opacity: 0 });
+  gsap.set('#playhead', { attr: { x1: 250, x2: 250 } });
+  gsap.set(['#hgate'], { opacity: 0, y: -220, transformOrigin: '360px 610px' });
+  gsap.set('#cdot', { scale: 0, transformOrigin: '580px 610px' });
+  gsap.set('#cline', { attr: { y2: 610 } });
+  gsap.set('#ctarget', { scale: 0, transformOrigin: '580px 770px' });
+  gsap.set(['#meter0', '#meter1'], { scale: 0, transformOrigin: '50% 50%' });
+  gsap.set('#slotB', { opacity: 0 });
+  gsap.set('#barB', { scaleY: 0.5 });
+  gsap.set('#s1', { opacity: 0 });
+  gsap.set(['#never01', '#never10'], { opacity: 0, scale: 1.5, rotation: -8 });
+  gsap.set('#formula', { opacity: 0, filter: 'blur(8px)' });
+
+  // ---------- B1 hook (0 - 3.2) ----------
+  tl.fromTo('#s1', { opacity: 0, filter: 'blur(8px)' }, { opacity: 1, filter: 'blur(0px)', duration: 0.2 }, 0.7);
+  tl.fromTo('#playhead', { opacity: 0 }, { opacity: 1, duration: 0.2, ease: 'power2.out' }, 1.4);
+  blurOut(['#t1', '#s1'], 3.2);
+
+  // ---------- B2 read it (3.2 - 7) : per-word blur-in ----------
+  tl.set('#t2', { opacity: 1 }, 3.35);
+  tl.fromTo(W.t2, { opacity: 0, filter: 'blur(6px)' }, { opacity: 1, filter: 'blur(0px)', duration: 0.14, stagger: 0.067, ease: 'power2.out' }, 3.35);
+  tl.fromTo('#s2', { opacity: 0, filter: 'blur(8px)' }, { opacity: 1, filter: 'blur(0px)', duration: 0.2 }, 3.9);
+  tl.to('#playhead', { attr: { x1: 280, x2: 280 }, duration: 0.6, ease: 'power2.inOut' }, 4.1);
+  tl.to(['#q0', '#q1'], { color: '#2538F0', duration: 0.25, stagger: 0.12, ease: 'power2.out' }, 4.6);
+  tl.to(['#q0', '#q1'], { color: '#141414', duration: 0.3, ease: 'power2.inOut' }, 6.3);
+  blurOut(['#t2', '#s2'], 6.85);
+
+  // ---------- B3 Hadamard (7 - 13) : grey -> ink per word ----------
+  tl.to('#hgate', { opacity: 1, duration: 0.12, ease: 'none' }, 7.0);
+  tl.to('#hgate', { y: 0, duration: 0.7, ease: 'back.out(1.6)' }, 7.0);
+  tl.set('#t3', { opacity: 1 }, 7.15);
+  tl.fromTo(W.t3, { color: '#c9a92e' }, { color: '#141414', duration: 0.2, stagger: 0.09, ease: 'power2.out' }, 7.15);
+  tl.fromTo('#s3', { opacity: 0, filter: 'blur(8px)' }, { opacity: 1, filter: 'blur(0px)', duration: 0.2 }, 8.9);
+  tl.to('#playhead', { attr: { x1: 470, x2: 470 }, duration: 0.8, ease: 'power2.inOut' }, 8.0);
+  // split: A halves, B appears from A and slides to |10>
+  tl.to('#barA', { scaleY: 0.5, duration: 0.7, ease: 'power3.inOut' }, 8.5);
+  tl.set('#slotB', { opacity: 1 }, 8.5);
+  tl.to('#slotB', { x: SLOT['10'], duration: 1.0, ease: 'power3.inOut' }, 8.75);
+  tl.to('#tint0', { attr: { x2: 900 }, duration: 0.9, ease: 'power3.inOut' }, 10.4);
+  blurOut(['#t3', '#s3'], 12.85);
+
+  // ---------- B4 CNOT (13 - 19.6) : whole-line blur ----------
+  tl.to('#cdot', { scale: 1, duration: 0.45, ease: 'back.out(2)' }, 13.0);
+  tl.to('#cline', { attr: { y2: 804 }, duration: 0.4, ease: 'power3.inOut' }, 13.2);
+  tl.to('#ctarget', { scale: 1, duration: 0.5, ease: 'back.out(1.8)' }, 13.45);
+  tl.fromTo('#t4', { opacity: 0, filter: 'blur(8px)' }, { opacity: 1, filter: 'blur(0px)', duration: 0.2 }, 13.1);
+  tl.fromTo('#s4', { opacity: 0, filter: 'blur(8px)' }, { opacity: 1, filter: 'blur(0px)', duration: 0.2 }, 14.6);
+  tl.to('#playhead', { attr: { x1: 690, x2: 690 }, duration: 0.8, ease: 'power2.inOut' }, 15.0);
+  tl.to('#slotB', { x: SLOT['11'], duration: 0.9, ease: 'power3.inOut' }, 15.55);
+  tl.to('#tint1', { attr: { x2: 900 }, duration: 0.8, ease: 'power3.inOut' }, 16.5);
+  tl.to('#s4', { opacity: 0, filter: 'blur(8px)', duration: 0.16, ease: 'power3.in' }, 17.3);
+  tl.fromTo('#s4b', { opacity: 0, filter: 'blur(8px)' }, { opacity: 1, filter: 'blur(0px)', duration: 0.2 }, 17.45);
+  blurOut(['#t4', '#s4b'], 19.45);
+
+  // ---------- B5 measure (19.6 - 26.6) : slot-roll ----------
+  tl.to('#meter0', { scale: 1, duration: 0.45, ease: 'back.out(1.8)' }, 19.6);
+  tl.to('#meter1', { scale: 1, duration: 0.45, ease: 'back.out(1.8)' }, 19.7);
+  tl.set('#t5', { opacity: 1 }, 19.65);
+  tl.fromTo(W.t5, { opacity: 0, filter: 'blur(6px)' }, { opacity: 1, filter: 'blur(0px)', duration: 0.14, stagger: 0.07, ease: 'power2.out' }, 19.65);
+  tl.fromTo('#rollInner', { y: 0 }, { y: -96, duration: 0.12, ease: 'power2.inOut' }, 20.25);
+  tl.to('#rollInner', { y: -192, duration: 0.16, ease: 'power3.out' }, 20.4);
+  tl.to('#playhead', { attr: { x1: 925, x2: 925 }, duration: 0.6, ease: 'power2.inOut' }, 20.2);
+  tl.to('#playhead', { opacity: 0, duration: 0.2, ease: 'power2.in' }, 20.8);
+  tl.fromTo('#s5', { opacity: 0 }, { opacity: 1, duration: 0.2, ease: 'power2.out' }, 20.9);
+  tl.to('.dial', { opacity: 0, duration: 0.15, ease: 'power2.in' }, 20.95);
+  tl.to(['#res0', '#res1'], { opacity: 1, duration: 0.12, ease: 'power2.out' }, 21.0);
+  tl.to(['#never01', '#never10'], { opacity: 1, scale: 1, duration: 0.35, stagger: 0.12, ease: 'back.out(2)' }, 25.4);
+  blurOut(['#t5', '#s5'], 26.45);
+
+  // ---------- B6 payoff (26.6 - 32.6) ----------
+  tl.set('#t6', { opacity: 1 }, 26.6);
+  tl.fromTo(W.t6, { opacity: 0, filter: 'blur(6px)' }, { opacity: 1, filter: 'blur(0px)', duration: 0.14, stagger: 0.08, ease: 'power2.out' }, 26.6);
+  tl.to(['#circ', '#circLabels'], { opacity: 0.12, filter: 'blur(4px)', duration: 0.5, ease: 'power2.inOut' }, 27.9);
+  tl.to('#formula', { opacity: 1, filter: 'blur(0px)', duration: 0.4 }, 28.1);
+  tl.fromTo('#s6', { opacity: 0, filter: 'blur(8px)' }, { opacity: 1, filter: 'blur(0px)', duration: 0.2 }, 29.5);
+  tl.to({}, { duration: 0.01 }, DUR - 0.01);
+
+  // ---------- measurement: pure function of t ----------
+  function mulberry32(a) { return () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+  const rnd = mulberry32(20261118);
+  const N = 1000, shots = [], c00 = [0];
+  for (let i = 0; i < N; i++) { const r = rnd() < 0.5 ? 0 : 1; shots.push(r); c00.push(c00[i] + (r === 0 ? 1 : 0)); }
+  const M0 = 21.0, M1 = 25.2;
+  const ctr = $('#counter'), res0 = $('#res0'), res1 = $('#res1'), pctA = $('#pctA'), pctB = $('#pctB');
+  const innerA = $('#innerA'), innerB = $('#innerB');
+
+  function derived(t) {
+    let pa = '100%', pb = '50%';
+    if (t >= 8.5) pa = '50%';
+    let sa = 1, sb = 1;
+    if (t >= M0) {
+      const u = Math.min(1, (t - M0) / (M1 - M0));
+      const n = Math.max(1, Math.round(N * Math.pow(u, 3.2)));
+      const k = c00[n];
+      const f00 = k / n, f11 = 1 - f00;
+      sa = f00 / 0.5; sb = f11 / 0.5;
+      pa = Math.round(f00 * 100) + '%'; pb = Math.round(f11 * 100) + '%';
+      ctr.textContent = n.toLocaleString('en-US') + (n === N ? '' : '');
+      const bit = String(shots[n - 1]);
+      res0.textContent = bit; res1.textContent = bit;
+    } else {
+      ctr.textContent = '0';
+    }
+    pctA.textContent = pa; pctB.textContent = pb;
+    innerA.style.transform = `scaleY(${sa})`;
+    innerB.style.transform = `scaleY(${sb})`;
+  }
+
+  window.__duration = DUR;
+  window.__seek = (t) => { tl.seek(Math.min(t, DUR), false); derived(t); };
+  window.__ready = document.fonts.ready.then(() => { window.__seek(0); return true; });
+  // preview in a normal browser: ?play
+  if (location.search.includes('play')) { const s = performance.now(); const f = () => { window.__seek(((performance.now() - s) / 1000) % DUR); requestAnimationFrame(f); }; f(); }
+})();
+</script>
+</body>
+</html>
