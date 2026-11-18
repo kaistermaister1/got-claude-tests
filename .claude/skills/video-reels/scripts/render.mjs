@@ -91,7 +91,7 @@ if (opt('out')) {
     const ctx = w === 0 ? probe : await launch();
     const seg = path.join(tmp, `seg${w}.mkv`);
     // sub-frames are averaged by tmix, then every S-th frame kept
-    const vf = shutter > 1 ? [`tmix=frames=${shutter}`, `select='not(mod(n+1\\,${shutter}))'`, 'setpts=N/FRAME_RATE/TB'] : [];
+    const vf = shutter > 1 ? [`tmix=frames=${shutter}`, `select='not(mod(n+1\\,${shutter}))'`, `setpts=N/${fps}/TB`] : [];
     const ff = ffmpeg(['-f', 'image2pipe', '-framerate', String(fps * shutter), '-i', '-',
       ...(vf.length ? ['-vf', vf.join(',')] : []), '-r', String(fps),
       '-c:v', 'libx264', '-preset', 'medium', '-crf', '10', '-pix_fmt', 'yuv444p', seg]);
